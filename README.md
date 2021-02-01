@@ -1,7 +1,7 @@
 # ATARRI
 A TESS Archive RR Lyrae Classifier
 
-#####Example usage:
+###### Example usage:
 ```python
 from ATARRI import RRLClassifier
 root = tkinter.Tk()
