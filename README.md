@@ -10,8 +10,6 @@ root.mainloop()
 ```
 
 ###### Todo:
- [ ] Add Blazhko selection
-
- [ ] Add aperture adjustment
-
- [ ] Add data selection ???
+- [ ] Add Blazhko selection
+- [ ] Add aperture adjustment
+- [ ] Add data selection ???
