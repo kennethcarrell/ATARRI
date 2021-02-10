@@ -8,7 +8,7 @@ setup(
     name='ATARRI',
     version='v0.2',
     description='A TESS Archive RR Lyrae Classifier',
-    python_requires='==3.8',
+    python_requires='==3.8.*',
     long_description=readme(),
     platforms=['any'],
     packages=find_packages(),
