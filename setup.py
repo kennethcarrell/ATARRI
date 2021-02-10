@@ -11,7 +11,7 @@ setup(
     python_requires='==3.8.*',
     long_description=readme(),
     platforms=['any'],
-    packages=find_packages(),
+    packages=['ATARRI'],
     url='https://github.com/kennethcarrell/ATARRI',
     license='GPL-3.0',
     author='Kenneth Carrell',
