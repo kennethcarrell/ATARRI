@@ -9,8 +9,8 @@ import tkinter
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
-import warnings
-warnings.filterwarnings("ignore",category=UserWarning)
+#import warnings
+#warnings.filterwarnings("ignore",category=UserWarning)
 
 class RRLClassifier:
     '''A GUI for visualizing and saving information about an RR Lyrae star from TESS FFI data.'''
@@ -202,9 +202,9 @@ class RRLClassifier:
     ## Pre-whiten data by subtracting the
     ## primary frequency and next 9 harmonics
     def doPreWhiten(self):
-        model_lc = self.lspg.model(self.star_lc.time*u.day,self.lspg.frequency_at_max_power)
+        model_lc = self.lspg.model(self.star_lc.time,self.lspg.frequency_at_max_power)
         for i in range(2,10):
-            model_lc = model_lc + self.lspg.model(self.star_lc.time*u.day,i*self.lspg.frequency_at_max_power) - 1.0
+            model_lc = model_lc + self.lspg.model(self.star_lc.time,i*self.lspg.frequency_at_max_power) - 1.0
         diff2 = self.star_lc - model_lc + 1.0
         self.pwlspg = diff2.to_periodogram(maximum_frequency=12.0, oversample_factor=50)
         return
@@ -269,7 +269,7 @@ class RRLClassifier:
         phasedwin.title("Inspect Phased Plot")
         t0 = self.star_lc.time[np.argmax(self.star_lc.flux)]
         figInspPhased, axInspPhased = plt.subplots(figsize=(6,3))
-        self.star_lc.fold(period=self.lspg.period_at_max_power,t0=t0).scatter(ax=axInspPhased)
+        self.star_lc.fold(period=self.lspg.period_at_max_power,epoch_time=t0,normalize_phase=True).scatter(ax=axInspPhased)
         yval = self.star_lc.flux[np.argmin(self.star_lc.flux)] + 0.2*(self.star_lc.flux[np.argmax(self.star_lc.flux)]-self.star_lc.flux[np.argmin(self.star_lc.flux)])
         axInspPhased.grid()
         phasedInspPlot = FigureCanvasTkAgg(figInspPhased, phasedwin)
@@ -381,7 +381,7 @@ class RRLClassifier:
         self.figZoom, self.axZoom = plt.subplots(figsize=(3,2))
         self.star_lc.scatter(ax=self.axZoom)
         self.axZoom.grid()
-        self.axZoom.set_xlim(self.star_lc.time[0]+4,self.star_lc.time[0]+6)
+        self.axZoom.set_xlim(self.star_lc.time[0].value+4,self.star_lc.time[0].value+6)
         self.zoomPlot = FigureCanvasTkAgg(self.figZoom, self.plotframe)
         self.zoomPlot.get_tk_widget().grid(row = 2, column = 4)
 
@@ -394,7 +394,7 @@ class RRLClassifier:
         plt.close(self.figPhased)
         self.figPhased, self.axPhased = plt.subplots(figsize=(3,2))
         # Fold the lightcurve using period from Lomb-Scargle analysis and t0
-        self.star_lc.fold(period=self.lspg.period_at_max_power,t0=t0).scatter(ax=self.axPhased)
+        self.star_lc.fold(period=self.lspg.period_at_max_power,epoch_time=t0,normalize_phase=True).scatter(ax=self.axPhased)
         # Print the period value on the plot
         yval = self.star_lc.flux[np.argmin(self.star_lc.flux)] + 0.2*(self.star_lc.flux[np.argmax(self.star_lc.flux)]-self.star_lc.flux[np.argmin(self.star_lc.flux)])
         self.axPhased.text(-0.2,yval,"P = %.5f"%(self.lspg.period_at_max_power.value))

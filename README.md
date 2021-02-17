@@ -11,6 +11,5 @@ root.mainloop()
 ```
 
 ###### Todo:
-- [x] Add Blazhko selection
-- [x] Add aperture adjustment
 - [ ] Add data selection ???
+- [ ] Add machine learning prediction

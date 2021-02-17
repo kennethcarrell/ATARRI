@@ -1,3 +1,7 @@
+v0.3
+----
+- compatibility with lightkurve v2.0
+
 v0.2
 ----
 - added a Blazhko check option
