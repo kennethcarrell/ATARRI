@@ -1,11 +1,10 @@
 # ATARRI
 A TESS Archive RR Lyrae Classifier
 
-## Look in the [doc](tree/main/doc/) directory for information about
-   [Installing](blob/main/doc/Installation.pdf),
-   [Using](blob/main/doc/UserManual.pdf), and a
-   [Science-Use Guidebook](blob/main/doc/Guidebook.pdf)
-   for this package.
+## Look in the [doc](doc/) directory for information about:
+- [Installing](doc/Installation.pdf) this package
+- [Using](doc/UserManual.pdf) this package
+- A [Science-Use Guidebook](doc/Guidebook.pdf) for this package.
 
 
 ###### Example usage:
