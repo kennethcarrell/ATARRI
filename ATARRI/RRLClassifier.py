@@ -8,15 +8,18 @@ from astroquery.simbad import Simbad
 import tkinter
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
+from matplotlib.widgets import SpanSelector
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 #import warnings
 #warnings.filterwarnings("ignore",category=UserWarning)
+from ATARRI.lightcurve_analysis import *
 
 class RRLClassifier:
     '''A GUI for visualizing and saving information about an RR Lyrae star from TESS FFI data.'''
 
     # Initialize variables and GUI
     def __init__(self, master):
+        # initialize variables
         self.RA = []
         self.DE = []
         self.tpf = 0
@@ -27,6 +30,14 @@ class RRLClassifier:
         self.lspg = 0
         self.pwlspg = 0
         self.PERIOD = []
+        self.PER_ERR = []
+        self.RISETIME = []
+        self.AMPLITUDE = []
+        self.R21 = []
+        self.R31 = []
+        self.PHASE = []
+        self.PHI21 = []
+        self.PHI31 = []
         self.TESSID = []
         self.NSECS = []
         self.RTYPE = []
@@ -45,33 +56,36 @@ class RRLClassifier:
         self.starName = ''
         self.infile = ''
         self.outfile = ''
+        self.lc_spans = []
+        self.lc_features = []
 
         # Create Frames
         self.master = master
         self.master.title("ATARRI GUI")
-        self.infoframe = tkinter.Frame(self.master)
-        self.plotframe = tkinter.Frame(self.master)
-        self.optionsframe = tkinter.Frame(self.master)
-        self.apselectframe = tkinter.Frame(self.master)
-        self.notesframe = tkinter.Frame(self.master)
+        self.mainframe = tkinter.Frame(self.master)
+        self.infoframe = tkinter.Frame(self.mainframe)
+        self.plotframe = tkinter.Frame(self.mainframe)
+        self.optionsframe = tkinter.Frame(self.mainframe)
+        self.apselectframe = tkinter.Frame(self.mainframe)
+        self.notesframe = tkinter.Frame(self.mainframe)
 
         # Information areas
         self.fNameButton = tkinter.Button(self.infoframe, text="Open File", fg="blue", command=self.retrieveInput)
         self.fNameButton.grid(row=0,column=0,padx=80)
-        self.fNameLabel = tkinter.Label(self.infoframe, text="Input File Name: ")
-        self.fNameLabel.grid(row=0,column=1,padx=80)
-        self.fNumberLabel = tkinter.Label(self.infoframe, text="N Stars = 0")
-        self.fNumberLabel.grid(row=0,column=2,padx=80)
-        self.saveButton = tkinter.Button(self.infoframe, text="Save This Star", fg="green", command=self.saveStar)
-        self.saveButton.grid(row=0,column=3,padx=80)
-        self.inspectLCButton = tkinter.Button(self.infoframe, text="Inspect Lightcurve", fg="blue", command=self.inspectLC)
-        self.inspectLCButton.grid(row=0,column=4,padx=80)
         self.sTICLabel = tkinter.Label(self.infoframe, text="TIC: ")
-        self.sTICLabel.grid(row=1,column=0)
+        self.sTICLabel.grid(row=0,column=1)
         self.sPosLabel = tkinter.Label(self.infoframe, text="(RA,DEC): ")
         self.sPosLabel.grid(row=1,column=1)
+        self.saveButton = tkinter.Button(self.infoframe, text="Save This Star", fg="green", command=self.saveStar)
+        self.saveButton.grid(row=0,column=2,padx=80)
+        self.inspectLCButton = tkinter.Button(self.infoframe, text="Inspect Lightcurve", fg="blue", command=self.inspectLC)
+        self.inspectLCButton.grid(row=0,column=3,padx=80)
         self.inspectPhasedButton = tkinter.Button(self.infoframe, text="Inspect Phased Plot", fg="blue", command=self.inspectPhased)
-        self.inspectPhasedButton.grid(row=1,column=4)
+        self.inspectPhasedButton.grid(row=1,column=3)
+        self.fNameLabel = tkinter.Label(self.infoframe, text="Input File Name: ")
+        self.fNameLabel.grid(row=0,column=4,padx=80)
+        self.fNumberLabel = tkinter.Label(self.infoframe, text="N Stars = 0")
+        self.fNumberLabel.grid(row=1,column=4,padx=80)
 
         # Classification Type
         self.RRLType = tkinter.IntVar()
@@ -193,25 +207,34 @@ class RRLClassifier:
         self.phasedPlot = FigureCanvasTkAgg(self.figPhased, self.plotframe)
         self.phasedPlot.get_tk_widget().grid(row=1,column=3)
 
+        # pack in frames
         self.infoframe.pack(side="top",fill="x",pady=20)
         self.apselectframe.pack(side="top",fill="x")
         self.plotframe.pack(side="top",fill="x")
         self.optionsframe.pack(side="top",fill="x",pady=20)
         self.notesframe.pack(side="bottom",fill="x")
 
-    ## Pre-whiten data by subtracting the
-    ## primary frequency and next 9 harmonics
-    def doPreWhiten(self):
-        model_lc = self.lspg.model(self.star_lc.time,self.lspg.frequency_at_max_power)
-        for i in range(2,10):
-            model_lc = model_lc + self.lspg.model(self.star_lc.time,i*self.lspg.frequency_at_max_power) - 1.0
-        diff2 = self.star_lc - model_lc + 1.0
-        self.pwlspg = diff2.to_periodogram(maximum_frequency=12.0, oversample_factor=50)
-        return
+        # add list of objects
+        self.mainframe.pack(side="left")
+        self.objectlistbox = tkinter.Listbox(master,fg="gray",font="TkFixedFont")
+        self.objectlistbox.pack(side="left",fill="y")
+        self.objectlistbox.bind('<<ListboxSelect>>',self.no_selection)
 
-    ## Update number of stars left
-    def changeCounter(self,N):
-        self.fNumberLabel['text'] = "N Stars = %d"%(N)
+    ## Don't allow user to change selection in listbox in main window
+    def no_selection(self,evt):
+        w = evt.widget
+        # make sure we have something in the box
+        if(hasattr(w.curselection(),"__len__") and len(w.curselection())>0):
+            index = w.curselection()[0]
+            self.objectlistbox.selection_clear(index)
+            self.changeCounter()
+
+    ## Update number of stars left and highlight current star
+    def changeCounter(self,N=-1):
+        N = max(N, len(self.RA))
+        self.fNumberLabel['text'] = "N Stars Left = %d"%(N)
+        for i in range(self.NDONE+1):
+            self.objectlistbox.selection_set(i)
 
     ## Update common name of star
     def changeTIC(self):
@@ -219,7 +242,13 @@ class RRLClassifier:
 
     ## Update RA,DEC
     def changeRADEC(self):
-        self.sPosLabel['text'] = "(RA, DEC): (%f, %f)"%(self.RA[len(self.RA)-1],self.DE[len(self.DE)-1])
+        self.sPosLabel['text'] = "(RA, DEC): (%f, %f)"%(self.RA[-1],self.DE[-1])
+
+    ## Show object list from opened file
+    def updateObjectList(self):
+        self.objectlistbox.delete(0,tkinter.END)
+        for i in range(len(self.RA)):
+            self.objectlistbox.insert(tkinter.END, "%9.5f, %9.5f"%(self.RA[i],self.DE[i]))
 
     ## Save options for star
     def storeValues(self):
@@ -232,14 +261,26 @@ class RRLClassifier:
         self.PDR[self.NDONE] = self.peridoub.get()
         self.NRR[self.NDONE] = self.nonrad61.get()
         self.BLA[self.NDONE] = self.isblazhko.get()
-        self.ORA[self.NDONE] = self.RA[len(self.RA)-1]
-        self.ODE[self.NDONE] = self.DE[len(self.DE)-1]
+        self.ORA[self.NDONE] = self.RA[-1]
+        self.ODE[self.NDONE] = self.DE[-1]
         self.NOTES[self.NDONE] = self.notesEntry.get()
         self.NAME[self.NDONE] = self.starName
+        self.PERIOD[self.NDONE] = self.lspg.period_at_max_power.value
+        self.PER_ERR[self.NDONE] = get_period_uncertainty(self.lspg)
+        riseTime = get_rise_time(self.star_lc,self.lspg)
+        self.RISETIME[self.NDONE] = riseTime['max'] - riseTime['min']
+        self.AMPLITUDE[self.NDONE] = self.lc_features['amplitude']
+        self.R21[self.NDONE] = self.lc_features['r21']
+        self.R31[self.NDONE] = self.lc_features['r31']
+        self.PHASE[self.NDONE] = self.lc_features['phase']
+        self.PHI21[self.NDONE] = self.lc_features['phi21']
+        self.PHI31[self.NDONE] = self.lc_features['phi31']
 
-        table = Table( [self.NAME, self.ORA, self.ODE, self.RTYPE, self.PERIOD, self.NSECS,
+        table = Table( [self.NAME, self.ORA, self.ODE, self.NSECS, self.RTYPE, self.PERIOD, self.PER_ERR, self.RISETIME,
+                        self.AMPLITUDE, self.R21, self.R31, self.PHASE, self.PHI21, self.PHI31,
                         self.APTEST, self.APSIZE, self.PHTEST, self.PDR, self.NRR, self.BLA, self.NOTES],
-                        names=('name','ra','dec','type','period','n sectors',
+                        names=('name','ra','dec','n sectors','type','period','period error','rise time (%)',
+                                   'amplitude','r21','r31','phase','phi21','phi31',
                                    'apcheck','apsize','phased','PD','NR','Blazhko','notes') )
         #table.write('tableRRL.fits', format='fits', overwrite=True)
         table.write(self.outfile, format='fits', overwrite=True)
@@ -247,37 +288,123 @@ class RRLClassifier:
 
     ## Reset all options for star
     def clearValues(self):
-        # reset information about the star
-        return
+        # reset selection information about the star
+        self.lc_spans[:] = []
 
-    ## Popup a window to interactively look at the lightcurve
+    ## Get indices of selected values
+    def onselect(self, xmin, xmax):
+        # get indices
+        indmin, indmax = np.searchsorted(self.star_lc_all.time.value, (xmin,xmax))
+        if(indmin == indmax):
+            return
+        # make sure max value is in dataset
+        indmax = min(len(self.star_lc_all.time)-1, indmax)
+
+        # plot selection in lower window
+        thisx = self.star_lc_all.time.value[indmin:indmax]
+        thisy = self.star_lc_all.flux.value[indmin:indmax]
+        self.line2.set_data(thisx,thisy)
+        self.selectedData.set_xlim(thisx[0],thisx[-1])
+        self.selectedData.set_ylim(thisy.min(), thisy.max())
+        # save this selection in the list and update listbox
+        self.lc_spans.append([indmin,indmax])
+        self.selectlistbox.insert(tkinter.END, self.lc_spans[-1])
+
+    ## Highlight a selected region
+    def highlight_span(self,evt):
+        w = evt.widget
+        # make sure something is in the box
+        if(hasattr(w.curselection(),"__len__") and len(w.curselection())>0):
+            index = w.curselection()[0]
+            value = w.get(index)
+        else:
+            return
+
+        indmin = int(value[0])
+        indmax = int(value[1])
+        indmax = min(len(self.star_lc_all.time)-1, indmax)
+        span = self.axInspLC.axes.axvspan(xmin=self.star_lc_all.time.value[indmin],
+                                            xmax=self.star_lc_all.time.value[indmax],
+                                            alpha=0.5,
+                                            facecolor='green',
+                                            label=[indmin,indmax])
+        self.lcInspPlot.draw_idle()
+
+    ## Delete selected regions
+    def remove_spans(self):
+        self.selectlistbox.delete(0,tkinter.END)
+        self.lc_spans[:] = []
+
+    ## Set mask for data on close
+    def handle_close(self,evt):
+        self.showStar(True)
+        #for item in self.lc_spans:
+        #    print(int(item[0]),int(item[1]))
+
+    ## Popup a window to interactively look at the lightcurve and select bad data
     def inspectLC(self):
+        # create new window
         inspwin = tkinter.Tk()
         inspwin.title("Inspect Lightcurve")
-        figInspLC, axInspLC = plt.subplots(figsize=(7,2))
-        self.star_lc.scatter(ax=axInspLC)
-        axInspLC.grid()
-        lcInspPlot = FigureCanvasTkAgg(figInspLC, inspwin)
-        #lcInspPlot.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=1)
 
-        toolbar = NavigationToolbar2Tk(lcInspPlot, inspwin)
+        # information on selected bad data
+        selectionsFrame = tkinter.Frame(inspwin)
+        buttonsFrame = tkinter.Frame(selectionsFrame)
+        self.inspClose = tkinter.Button(buttonsFrame, text="Save and Close", command=inspwin.destroy)
+        self.inspClose.pack(side='left')
+        self.inspDelete = tkinter.Button(buttonsFrame, text="Delete Selections", command=self.remove_spans)
+        self.inspDelete.pack(side='left')
+        buttonsFrame.pack(side='top', fill=tkinter.X)
+        self.selectlistbox = tkinter.Listbox(selectionsFrame)
+        self.selectlistbox.pack(side='bottom', fill=tkinter.Y)
+        for item in self.lc_spans:
+            self.selectlistbox.insert(tkinter.END, item)
+        self.selectlistbox.bind('<<ListboxSelect>>', self.highlight_span)
+
+        # plot of the lightcurve (above) and selected region (below)
+        plottingFrame = tkinter.Frame(inspwin)
+        self.baddataLabel = tkinter.Label(plottingFrame, text="Select Bad Data", font=('',42))
+        self.baddataLabel.pack(side='top',fill=tkinter.BOTH)
+        self.figInspLC, (self.axInspLC,self.selectedData) = plt.subplots(2,figsize=(12,6))
+        self.axInspLC.plot(self.star_lc_all.time.value,self.star_lc_all.flux.value,'k.')
+        self.axInspLC.grid()
+        self.line2, = self.selectedData.plot(self.star_lc_all.time.value,self.star_lc_all.flux.value,'r.')
+        self.selectedData.grid()
+        self.lcInspPlot = FigureCanvasTkAgg(self.figInspLC, plottingFrame)
+
+        # add a toolbar for plot control
+        toolbar = NavigationToolbar2Tk(self.lcInspPlot, plottingFrame)
         toolbar.update()
-        lcInspPlot.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=1)
+        
+        self.lcInspPlot.get_tk_widget().pack(side='top', fill=tkinter.BOTH, expand=1)
+        # selection tool for bad data
+        self.spanSel = SpanSelector(self.axInspLC, self.onselect, 'horizontal', useblit=True,
+                                    rectprops=dict(alpha=0.5, facecolor='red'),span_stays=True)        
+        self.lcInspPlot.mpl_connect('key_press_event',self.spanSel)
+        self.lcInspPlot.mpl_connect('close_event',self.handle_close)
 
+        plottingFrame.pack(side='left')
+        selectionsFrame.pack(side='left')
+
+    ## Popup a window to interactively look at the phased plot
     def inspectPhased(self):
+        # create new window
         phasedwin = tkinter.Tk()
         phasedwin.title("Inspect Phased Plot")
+
+        # fold and plot lightcurve
         t0 = self.star_lc.time[np.argmax(self.star_lc.flux)]
         figInspPhased, axInspPhased = plt.subplots(figsize=(6,3))
         self.star_lc.fold(period=self.lspg.period_at_max_power,epoch_time=t0,normalize_phase=True).scatter(ax=axInspPhased)
         yval = self.star_lc.flux[np.argmin(self.star_lc.flux)] + 0.2*(self.star_lc.flux[np.argmax(self.star_lc.flux)]-self.star_lc.flux[np.argmin(self.star_lc.flux)])
         axInspPhased.grid()
         phasedInspPlot = FigureCanvasTkAgg(figInspPhased, phasedwin)
-        #phasedInspPlot.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=1)
 
+        # add a toolbar for plot control
         toolbar = NavigationToolbar2Tk(phasedInspPlot, phasedwin)
         toolbar.update()
-        phasedInspPlot.get_tk_widget().pack(side=tkinter.TOP, fill=tkinter.BOTH, expand=1)
+        
+        phasedInspPlot.get_tk_widget().pack(side='top', fill=tkinter.BOTH, expand=1)
 
 
     ## Popup what is wrong
@@ -304,6 +431,8 @@ class RRLClassifier:
         temp = [0,1]
         self.RA.clear()
         self.DE.clear()
+        self.objectlistbox.configure(state=tkinter.NORMAL)
+        self.objectlistbox.delete(0,tkinter.END)
         try:
             for line in open(fname):
                 parse = line.split()
@@ -312,11 +441,21 @@ class RRLClassifier:
                 self.RA.append(temp[0])
                 self.DE.append(temp[1])
             # Show number of stars in file
-            self.changeCounter(len(self.RA))
+            self.changeCounter()
+            # Update list of stars
+            self.updateObjectList()
             # We go backwards through the list
             self.RA.reverse()
             self.DE.reverse()
             self.PERIOD = np.zeros(len(self.RA), dtype='float')
+            self.PER_ERR = np.zeros(len(self.RA), dtype='float')
+            self.RISETIME = np.zeros(len(self.RA), dtype='float')
+            self.AMPLITUDE = np.zeros(len(self.RA), dtype='float')
+            self.R21 = np.zeros(len(self.RA), dtype='float')
+            self.R31 = np.zeros(len(self.RA), dtype='float')
+            self.PHASE = np.zeros(len(self.RA), dtype='float')
+            self.PHI21 = np.zeros(len(self.RA), dtype='float')
+            self.PHI31 = np.zeros(len(self.RA), dtype='float')
             self.TESSID = np.zeros(len(self.RA), dtype='int')
             self.NSECS = np.zeros(len(self.RA), dtype='int')
             self.RTYPE = np.zeros(len(self.RA), dtype='int')
@@ -350,13 +489,12 @@ class RRLClassifier:
         self.nonrad61.set(0)
         self.isblazhko.set(0)
         self.notesEntry.delete(0, tkinter.END)
-        self.changeCounter(len(self.RA))
+        self.changeCounter()
         self.showStar()
 
     ## Plot the TPF image and aperture
     def addTPF(self):
         self.tpfPlot.get_tk_widget().grid_forget()
-        #self.figContour.clear()
         plt.close(self.figContour)
         self.figContour, self.figAx = plt.subplots(figsize=(2,2))
         self.tpf[0].plot(ax=self.figAx, aperture_mask=self.target_mask0, mask_color='k')
@@ -367,7 +505,6 @@ class RRLClassifier:
     ## a zoomed in portion
     def addLC(self):
         self.lcPlot.get_tk_widget().grid_forget()
-        #self.figLC.clear()
         plt.close(self.figLC)
         self.figLC, self.axLC = plt.subplots(figsize=(7,2))
         self.star_lc.scatter(ax=self.axLC)
@@ -376,7 +513,6 @@ class RRLClassifier:
         self.lcPlot.get_tk_widget().grid(row = 2, column = 1, columnspan = 3)
 
         self.zoomPlot.get_tk_widget().grid_forget()
-        #self.figZoom.clear()
         plt.close(self.figZoom)
         self.figZoom, self.axZoom = plt.subplots(figsize=(3,2))
         self.star_lc.scatter(ax=self.axZoom)
@@ -389,28 +525,34 @@ class RRLClassifier:
     def addPhased(self):
         # Get max value for t0 estimate
         t0 = self.star_lc.time[np.argmax(self.star_lc.flux)]
+        # Get values for rise time
+        riseTime = get_rise_time(self.star_lc,self.lspg)
+
         self.phasedPlot.get_tk_widget().grid_forget()
-        #self.figPhased.clear()
         plt.close(self.figPhased)
         self.figPhased, self.axPhased = plt.subplots(figsize=(3,2))
         # Fold the lightcurve using period from Lomb-Scargle analysis and t0
         self.star_lc.fold(period=self.lspg.period_at_max_power,epoch_time=t0,normalize_phase=True).scatter(ax=self.axPhased)
         # Print the period value on the plot
         yval = self.star_lc.flux[np.argmin(self.star_lc.flux)] + 0.2*(self.star_lc.flux[np.argmax(self.star_lc.flux)]-self.star_lc.flux[np.argmin(self.star_lc.flux)])
+        yval2 = self.star_lc.flux[np.argmin(self.star_lc.flux)] + 0.4*(self.star_lc.flux[np.argmax(self.star_lc.flux)]-self.star_lc.flux[np.argmin(self.star_lc.flux)])
         self.axPhased.text(-0.2,yval,"P = %.5f"%(self.lspg.period_at_max_power.value))
+        self.axPhased.text(-0.2,yval2,"rise time = %.1f%%"%((riseTime['max']-riseTime['min'])*100.))
         self.axPhased.grid()
+        # Gray regions of max/min for rise time
+        self.axPhased.axvspan(riseTime['min']-0.01,riseTime['min']+0.01,alpha=0.42,color='gray')
+        self.axPhased.axvspan(riseTime['max']-0.01,riseTime['max']+0.01,alpha=0.42,color='gray')
         self.phasedPlot = FigureCanvasTkAgg(self.figPhased, self.plotframe)
         self.phasedPlot.get_tk_widget().grid(row = 3, column = 4)
 
     ## Plot analysis for an RRab/c type
     def addAnalysis_c(self):
-        self.PERIOD[self.NDONE] = self.lspg.period_at_max_power.value
+        #self.PERIOD[self.NDONE] = self.lspg.period_at_max_power.value
         fPrimary = self.lspg.frequency_at_max_power.value
         majorTicks = np.arange(0,13,1)
         minorTicks = np.arange(0,13,0.5)
 
         self.powerPlot.get_tk_widget().grid_forget()
-        #self.figPower.clear()
         plt.close(self.figPower)
         self.figPower, self.axPower = plt.subplots(figsize=(3,2))
         # Plot Lomb-Scargle analysis
@@ -425,10 +567,9 @@ class RRLClassifier:
         self.powerPlot.get_tk_widget().grid(row = 3, column = 0)
 
         # Pre-whiten the Lomb-Scargle analysis
-        self.doPreWhiten()
+        self.pwlspg = doPreWhiten(self.lspg,self.star_lc)
 
         self.prewhitenPlot.get_tk_widget().grid_forget()
-        #self.figPreWhiten.clear()
         plt.close(self.figPreWhiten)
         self.figPreWhiten, self.axPreWhiten = plt.subplots(figsize=(3,2))
         # Plot pre-whitened Lomb-Scargle analysis
@@ -441,7 +582,6 @@ class RRLClassifier:
         self.prewhitenPlot.get_tk_widget().grid(row = 3, column = 1)
 
         self.pwzoomPlot.get_tk_widget().grid_forget()
-        #self.figPWZoom.clear()
         plt.close(self.figPWZoom)
         self.figPWZoom, self.axPWZoom = plt.subplots(figsize=(3,2))
 
@@ -473,16 +613,6 @@ class RRLClassifier:
         self.addPhased()
         self.addAnalysis_c()
 
-    ## Remove times with bad data
-    ## NOT USED
-    def goodTimes(self,lc,sec):
-        if(sec == 20):
-            return ((lc.time < 1856) | (lc.time > 1858))
-        elif(sec == 17):
-            return ((lc.time < 1772) | (lc.time > 1778))
-        else:
-            return (lc.time > 0)
-
     ## Get data and display
     def showStar(self,updateOnly=False):
         plt.close('all')
@@ -490,7 +620,7 @@ class RRLClassifier:
         if(len(self.RA)==0):
             self.changeCounter(0)
             self.errorWindow("ALL DONE.")
-            self.changeCounter(len(self.RA))
+            self.updateObjectList()
             return
 
         self.apthresh = float(self.apselectEntry.get())
@@ -500,7 +630,7 @@ class RRLClassifier:
             ## clear marked values and update RA/DEC
             self.clearValues()
             self.changeRADEC()
-            self.changeCounter(len(self.RA))
+            self.changeCounter()
 
             ## get the coordinates of the next star
             coord = SkyCoord(self.RA[-1],self.DE[-1], unit="deg")
@@ -534,9 +664,6 @@ class RRLClassifier:
 
             ## create the lightcurve for the first sector using aperture
             raw_lc = self.tpf[0].to_lightcurve(aperture_mask=self.target_mask0)
-            ## eliminate problem times from sector
-            #time_mask = self.goodTimes(raw_lc,self.tpf[0].sector)
-            #raw_lc = raw_lc[time_mask]
 
             ## create a mask for the background signal
             self.bkgr_mask0 = ~self.tpf[0].create_threshold_mask(threshold=0.001, reference_pixel=None)
@@ -544,14 +671,14 @@ class RRLClassifier:
 
             ## create a lightcurve for the background and scale it to the target aperture
             bkgr_lc = self.tpf[0].to_lightcurve(aperture_mask=self.bkgr_mask0) / n_background_pixels * n_target_pixels
-            ## eliminate problem times from sector
-            #bkgr_lc = bkgr_lc[time_mask]
 
             ## subtract the background from the signal
             self.star_lc = (raw_lc - bkgr_lc.flux)
 
             ## normalize the flux and remove problem points
-            self.star_lc = self.star_lc.remove_nans().remove_outliers(sigma=6).normalize()
+            forFeatures = self.star_lc.remove_nans().remove_outliers(sigma=6)
+            self.star_lc = forFeatures.normalize()
+            #self.star_lc = self.star_lc.remove_nans().remove_outliers(sigma=6).normalize()
             #self.star_lc = self.star_lc[(self.star_lc.flux>0.6) & (self.star_lc.flux<1.6)]
 
             print('DONE.', flush=True)
@@ -569,9 +696,6 @@ class RRLClassifier:
 
                 ## create the lightcurve for the first sector using aperture
                 raw_lc = itpf.to_lightcurve(aperture_mask=target_mask)
-                ## eliminate problem times from sector
-                #time_mask = self.goodTimes(raw_lc,itpf.sector)
-                #raw_lc = raw_lc[time_mask]
 
                 ## create a mask for the background signal
                 bkgr_mask = ~itpf.create_threshold_mask(threshold=0.001, reference_pixel=None)
@@ -579,23 +703,37 @@ class RRLClassifier:
 
                 ## create a lightcurve for the background and scale it to the target aperture
                 bkgr_lc = itpf.to_lightcurve(aperture_mask=bkgr_mask) / n_background_pixels * n_target_pixels
-                ## eliminate problem times from sector
-                #bkgr_lc = bkgr_lc[time_mask]
 
                 ## subtract the background from the signal
                 temp_lc = (raw_lc - bkgr_lc.flux)
 
                 ## normalize the flux and remove problem points
-                temp_lc = temp_lc.remove_nans().remove_outliers(sigma=6).normalize()
+                temp_lc = temp_lc.remove_nans().remove_outliers(sigma=6)
+                forFeatures = forFeatures.append(temp_lc)
+                #temp_lc = temp_lc.remove_nans().remove_outliers(sigma=6).normalize()
                 #temp_lc = temp_lc[(temp_lc.flux>0.6) & (temp_lc.flux<1.6)]
 
                 ## add this sector to the previous
-                self.star_lc = self.star_lc.append(temp_lc)
+                self.star_lc = self.star_lc.append(temp_lc.normalize())
+                #self.star_lc = self.star_lc.append(temp_lc)
 
                 print('DONE.', flush=True)
 
-            ## do a LombScargle analysis of the lightcurve
+            # mask out bad data selection(s)
+            self.star_lc_all = self.star_lc.copy()
+            bddt_msk = np.ones(len(self.star_lc), dtype=bool)
+            for item in self.lc_spans:
+                bddt_msk[int(item[0]):int(item[1])+1] = False
+            self.star_lc = self.star_lc[bddt_msk]
+            
+            # do a LombScargle analysis of the lightcurve
             self.lspg = self.star_lc.to_periodogram(maximum_frequency=12.0,oversample_factor=50)
+
+            # determine Fourier features of the lightcurve
+            forFeatures = forFeatures[bddt_msk]
+            self.lc_features = getFeatures(forFeatures,self.lspg.period_at_max_power.value)
+            #print(self.lc_features)
+
         else:
             self.errorWindow("NOT IN SECTOR")
             self.saveStar()
