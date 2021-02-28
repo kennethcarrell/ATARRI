@@ -2,6 +2,7 @@ import numpy as np
 from astropy.io import fits
 from astropy.table import Table
 import astropy.units as u
+from scipy.signal import find_peaks
 from lightkurve import search_tesscut
 from astropy.coordinates import SkyCoord
 from astroquery.simbad import Simbad
@@ -27,6 +28,7 @@ class RRLClassifier:
         self.target_mask0 = 0
         self.bkgr_mask0 = 0
         self.star_lc = 0
+        self.peaks = []
         self.lspg = 0
         self.pwlspg = 0
         self.PERIOD = []
@@ -78,6 +80,8 @@ class RRLClassifier:
         self.sPosLabel.grid(row=1,column=1)
         self.saveButton = tkinter.Button(self.infoframe, text="Save This Star", fg="green", command=self.saveStar)
         self.saveButton.grid(row=0,column=2,padx=80)
+        self.savePlotsButton = tkinter.Button(self.infoframe, text="Save Plots", fg="blue", command=self.savePlots)
+        self.savePlotsButton.grid(row=1,column=2)
         self.inspectLCButton = tkinter.Button(self.infoframe, text="Inspect Lightcurve", fg="blue", command=self.inspectLC)
         self.inspectLCButton.grid(row=0,column=3,padx=80)
         self.inspectPhasedButton = tkinter.Button(self.infoframe, text="Inspect Phased Plot", fg="blue", command=self.inspectPhased)
@@ -286,6 +290,54 @@ class RRLClassifier:
         table.write(self.outfile, format='fits', overwrite=True)
         return
 
+    ## Save plots to file
+    def savePlots(self):
+        savewin = tkinter.Tk()
+        savewin.title("Save Plots")
+
+        # Choose plot
+        typeLabel = tkinter.Label(savewin, text="Select Plot to Save")
+        typeLabel.grid(row=0,column=0,sticky=tkinter.W,padx=30)
+        tpfButton = tkinter.Button(savewin, text="Save TPF", fg='red', command=lambda: self.saveThisPlot(1))
+        tpfButton.grid(row=1,column=0,sticky=tkinter.W,padx=35,pady=8)
+        lcButton = tkinter.Button(savewin, text="Save Lightcurve", fg='red', command=lambda: self.saveThisPlot(2))
+        lcButton.grid(row=2,column=0,sticky=tkinter.W,padx=35,pady=8)
+        lsButton = tkinter.Button(savewin, text="Save Lomb-Scargle", fg='red', command=lambda: self.saveThisPlot(3))
+        lsButton.grid(row=3,column=0,sticky=tkinter.W,padx=35,pady=8)
+        pwlsButton = tkinter.Button(savewin, text="Save Pre-Whitened L-S", fg='red', command=lambda: self.saveThisPlot(4))
+        pwlsButton.grid(row=4,column=0,sticky=tkinter.W,padx=35,pady=8)
+        foldedButton = tkinter.Button(savewin, text="Save Folded Lightcurve", fg='red', command=lambda: self.saveThisPlot(5))
+        foldedButton.grid(row=5,column=0,sticky=tkinter.W,padx=35,pady=8)
+        closePlotWindow = tkinter.Button(savewin, text="Close This Window", fg='blue', command=savewin.destroy)
+        closePlotWindow.grid(row=6,column=0)
+
+    ## Save the chosen plot
+    def saveThisPlot(self,theChoice):
+        fname = tkinter.filedialog.asksaveasfilename()
+        if(theChoice == 1): # TPF
+            self.figContour.suptitle("%s"%(self.starName))
+            self.figContour.savefig(fname)
+            self.figContour.suptitle("")
+        elif(theChoice == 2): # Lightcurve
+            self.figLC.suptitle("%s"%(self.starName))
+            self.figLC.savefig(fname)
+            self.figLC.suptitle("")
+        elif(theChoice == 3): # Lomb-Scargle
+            self.figPower.suptitle("%s"%(self.starName))
+            self.figPower.savefig(fname)
+            self.figPower.suptitle("")
+        elif(theChoice == 4): # Pre-Whitened L-S
+            self.figPWZoom.suptitle("%s"%(self.starName))
+            self.figPWZoom.savefig(fname)
+            self.figPWZoom.suptitle("")
+        elif(theChoice == 5): # Folded Lightcurve
+            self.figPhased.suptitle("%s"%(self.starName))
+            self.figPhased.savefig(fname)
+            self.figPhased.suptitle("")
+        else:
+            print("Nothing selected")
+            return
+
     ## Reset all options for star
     def clearValues(self):
         # reset selection information about the star
@@ -367,6 +419,7 @@ class RRLClassifier:
         self.baddataLabel.pack(side='top',fill=tkinter.BOTH)
         self.figInspLC, (self.axInspLC,self.selectedData) = plt.subplots(2,figsize=(12,6))
         self.axInspLC.plot(self.star_lc_all.time.value,self.star_lc_all.flux.value,'k.')
+        self.axInspLC.plot(self.star_lc.time.value[self.peaks],self.star_lc.flux[self.peaks],'ob')
         self.axInspLC.grid()
         self.line2, = self.selectedData.plot(self.star_lc_all.time.value,self.star_lc_all.flux.value,'r.')
         self.selectedData.grid()
@@ -508,6 +561,7 @@ class RRLClassifier:
         plt.close(self.figLC)
         self.figLC, self.axLC = plt.subplots(figsize=(7,2))
         self.star_lc.scatter(ax=self.axLC)
+        plt.plot(self.star_lc.time.value[self.peaks], self.star_lc.flux[self.peaks], 'or')
         self.axLC.grid()
         self.lcPlot = FigureCanvasTkAgg(self.figLC, self.plotframe)
         self.lcPlot.get_tk_widget().grid(row = 2, column = 1, columnspan = 3)
@@ -725,6 +779,9 @@ class RRLClassifier:
             for item in self.lc_spans:
                 bddt_msk[int(item[0]):int(item[1])+1] = False
             self.star_lc = self.star_lc[bddt_msk]
+
+            # get peaks
+            self.peaks = find_peaks(self.star_lc.flux,prominence=0.25)[0]
             
             # do a LombScargle analysis of the lightcurve
             self.lspg = self.star_lc.to_periodogram(maximum_frequency=12.0,oversample_factor=50)

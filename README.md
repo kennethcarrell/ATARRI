@@ -17,5 +17,4 @@ root.mainloop()
 ```
 
 ###### Todo:
-- [x] Add data selection ???
 - [ ] Add machine learning prediction

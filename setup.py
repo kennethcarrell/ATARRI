@@ -6,7 +6,7 @@ def readme():
 
 setup(
     name='ATARRI',
-    version='v1.0',
+    version='v1.1',
     description='A TESS Archive RR Lyrae Classifier',
     python_requires='==3.8.*',
     long_description=readme(),

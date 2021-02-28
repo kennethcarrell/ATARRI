@@ -1,3 +1,8 @@
+v1.1
+----
+- added option to save plots
+- added different color points for cycle peaks for better Blazhko identification
+
 v1.0
 ----
 - added more output information to fits file
