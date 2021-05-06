@@ -13,11 +13,11 @@ authors:
 affiliations:
   - name: Angelo State University
   index: 1
-date: 27 April 2021
+date: 06 May 2021
+bibliography: paper.bib
 
 aas-doi: xxxx/xxxx
 aas-journal: The Astrophysical Journal Letters
-bibliography: paper.bib
 ---
 
 # Summary
