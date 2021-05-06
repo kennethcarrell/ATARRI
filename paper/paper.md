@@ -1,17 +1,17 @@
 ---
 title: 'ATARRI: A TESS Archive RR Lyrae Classifier'
 tags:
-  - Python
-  - astronomy
-  - TESS
-  - GUI
-  - RR Lyrae
+- Python
+- astronomy
+- TESS
+- GUI
+- RR Lyrae
 authors:
-  - name: Kenneth W. Carrell
+- name: Kenneth W. Carrell
   orcid: 0000-0002-6307-992X
   affiliation: 1
 affiliations:
-  - name: Angelo State University
+- name: Angelo State University
   index: 1
 date: 06 May 2021
 bibliography: paper.bib
