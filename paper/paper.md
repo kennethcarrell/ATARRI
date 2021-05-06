@@ -34,7 +34,7 @@ a more detailed analysis.
 
 The ATARRI GUI is designed as a user-friendly interface to display
 information about known or suspected RR Lyrae variable stars. The data
-comes from the Transiting Exoplanet Survey Satellite (TESS, @tess) data
+comes from the Transiting Exoplanet Survey Satellite [TESS, @tess] data
 archive, which upon its completion will have 
 imaged almost the entire sky twice. Being an all-sky survey, it is 
 obviously very large in terms of types of objects observed as well as
